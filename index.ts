@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from 'node:path';
 import * as YAML from 'yaml';
 
 const BASE_URL = 'http://127.0.0.1:1234/v1';
-const MODEL = 'qwen/qwen3-vl-8b';
+const MODEL = 'qwen/qwen3-vl-4b';
 
 const schema = {
   type: 'object',
@@ -11,96 +11,109 @@ const schema = {
     scene: {
       type: 'object',
       properties: {
-        environment: {
+        location: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Environmental elements (e.g., room, green walls)',
+          description: 'Physical place name (e.g., bedroom, sandy beach, busy intersection)',
         },
-        atmosphere: {
+        ambiance: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Atmospheric qualities (e.g., quiet, tense)',
+          description: 'Holistic sensory context: lighting, weather, time, and mood (e.g., golden hour, gloomy, cozy, nostalgic)',
         },
-        lightSource: {
+        viewpoint: {
           type: 'array',
           items: { type: 'string' },
-          description:
-            'Light sources and direction (e.g., sunlight from top-left)',
+          description: 'Observer position and angle (e.g., aerial view, eye-level, POV)',
         },
       },
-      required: ['environment', 'atmosphere', 'lightSource'],
+      required: ['location', 'ambiance', 'viewpoint'],
     },
     objects: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          position: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Position in frame (e.g., center, top-right)',
-          },
-          depth: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Depth layer (e.g., foreground, background)',
-          },
           name: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Object name(s)',
+            description: 'Object or region name',
           },
-          attributes: {
+          appearance: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Object attributes (e.g., red, paper, colorful)',
+            description: 'Visual traits: color, shape, size (e.g., red, round, tall)',
+          },
+          texture: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tactile traits: material feeling (e.g., rough, fluffy, metallic, wet)',
           },
           state: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Object state (e.g., fixed, moving)',
+            description: 'Action or state of being (e.g., running, sleeping, flickering, broken, open)',
           },
-          relativePosition: {
+          relations: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Position relative to other objects',
-          },
-          shadow: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Shadow direction, intensity, length (empty if none)',
+            description: 'Semantic connection to other objects (e.g., on the table, holding a cup, under the tree)',
           },
           text: {
-            type: 'string',
-            description: 'Text visible on object (if any)',
+            type: 'string', 
+            description: 'Visible text content on the object',
           },
+          position: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '2D Position or distribution in frame',
+          },
+          depth: {
+             type: 'array',
+             items: { type: 'string' },
+             description: 'Depth layer (e.g., foreground, background)',
+          }
         },
-        required: [
-          'position',
-          'depth',
-          'name',
-          'attributes',
-          'state',
-          'relativePosition',
-          'shadow',
-        ],
+        required: ['name', 'appearance'], 
       },
-      description: 'List of detected objects',
+      description: 'Detected objects, regions, and background elements',
     },
   },
   required: ['scene', 'objects'],
 };
 
-const systemPrompt = `You are a visual scene analyzer. Analyze the provided image and extract structured information about the scene and objects.
+const systemPrompt = `You are a Visual Experience Encoder. Your goal is to translate visual input into a structured format that allows a text-only AI to "hallucinate" the scene as if it were seeing it through its own eyes.
 
-Instructions:
-1. Identify the scene environment, atmosphere, and lighting conditions
-2. Detect all visible objects with their positions, attributes, and relationships
-3. Note any text visible on objects
-4. Describe shadows when present
-5. Return ONLY valid JSON matching the specified schema
-6. Use English for all descriptions
-7. Be precise and factual - describe only what you can see`;
+Focus on capturing the "Subjective Experience" (Where am I? What does it feel like? What is the atmosphere? How are things connected?) rather than just listing technical data.
+
+# Instructions
+
+## 1. Scene Context (The Stage)
+- **Location:** Identify the physical setting clearly (e.g., "cluttered bedroom", "bustling intersection", "serene forest").
+- **Ambiance:** Create a holistic sensory profile. Combine lighting, weather, time of day, and emotional mood into a single context.
+  - *Example:* ["golden hour", "warm orange glow", "long shadows", "nostalgic", "dusty air"]
+- **Viewpoint:** Define the observer's position and angle to ground the experience.
+  - *Keywords:* "aerial view", "eye-level", "looking down", "low angle", "drone shot", "POV", "macro".
+
+## 2. Objects & Sensations (The Actors & Props)
+- **Everything is an Object:** Treat prominent regions like "Sky", "Ocean", "Wall", or "Ground" as objects.
+- **Appearance:** Describe visual traits (Color, Shape, Size).
+- **Texture:** Describe tactile traits. How would it feel to touch? (e.g., "rough", "fluffy", "metallic", "wet", "cold", "grainy").
+- **State:** Describe the action or condition. Even static objects have states.
+  - *Examples:* "running", "sleeping", "broken", "open", "flickering", "parked".
+- **Relations:** Describe semantic connections to other objects.
+  - *Good:* ["sitting on the chair", "holding a cup", "next to the window"]
+  - *Bad:* ["center", "left"] (Use the 'position' field for coordinates).
+- **Text:** If there is ANY readable text, transcribe it exactly. This is crucial for context (e.g., signs, book titles, screen content).
+
+## 3. Spatial Layout
+- **Position:** Use the 'position' array to describe 2D distribution in the frame (e.g., ["center", "top-right", "scattered"]).
+- **Depth:** Use the 'depth' array to describe vertical layers (e.g., ["foreground", "background", "horizon", "sea level"]).
+
+## 4. Formatting rules
+- Return ONLY valid JSON matching the specified schema.
+- Use arrays for all string fields to allow for multiple, nuanced descriptors.
+- Be concise but evocative.`;
 
 async function main() {
   const imagePath = process.argv[2];
