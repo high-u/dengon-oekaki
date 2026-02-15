@@ -1,0 +1,21 @@
+{
+  "name": "dengon-oekaki",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check": "biome check",
+    "fix": "biome format --write"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.15",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2"
+  }
+}
