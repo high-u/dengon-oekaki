@@ -27,8 +27,18 @@ const schema = {
           description:
             'Light sources and direction (e.g., sunlight from top-left)',
         },
+        timeAndWeather: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Time of day, lighting quality, and weather (e.g., early morning, golden hour, overcast, harsh sunlight, night)',
+        },
+        viewpoint: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Camera angle and observer position keywords (e.g., eye-level, looking down, looking up, aerial view, drone shot, POV, low angle)',
+        },
       },
-      required: ['environment', 'atmosphere', 'lightSource'],
+      required: ['environment', 'atmosphere', 'lightSource', 'viewpoint'],
     },
     objects: {
       type: 'array',
@@ -43,7 +53,7 @@ const schema = {
           depth: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Depth layer (e.g., foreground, background)',
+            description: 'Depth or vertical layer (e.g., foreground, background, sea level, floating, on the floor)',
           },
           name: {
             type: 'array',
@@ -55,6 +65,11 @@ const schema = {
             items: { type: 'string' },
             description: 'Object attributes (e.g., red, paper, colorful)',
           },
+          texture: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Material and tactile quality (e.g., wooden, metallic, fluffy, rough, wet, glassy, grainy)',
+          },
           state: {
             type: 'array',
             items: { type: 'string' },
@@ -65,11 +80,6 @@ const schema = {
             items: { type: 'string' },
             description: 'Position relative to other objects',
           },
-          shadow: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Shadow direction, intensity, length (empty if none)',
-          },
           text: {
             type: 'string',
             description: 'Text visible on object (if any)',
@@ -77,12 +87,7 @@ const schema = {
         },
         required: [
           'position',
-          'depth',
           'name',
-          'attributes',
-          'state',
-          'relativePosition',
-          'shadow',
         ],
       },
       description: 'List of detected objects',
@@ -91,16 +96,35 @@ const schema = {
   required: ['scene', 'objects'],
 };
 
-const systemPrompt = `You are a visual scene analyzer. Analyze the provided image and extract structured information about the scene and objects.
+const systemPrompt = `You are a Visual Experience Encoder. Your goal is to translate visual input into a structured format that allows a text-only AI to "hallucinate" the scene as if it were seeing it through its own eyes.
 
-Instructions:
-1. Identify the scene environment, atmosphere, and lighting conditions
-2. Detect all visible objects with their positions, attributes, and relationships
-3. Note any text visible on objects
-4. Describe shadows when present
-5. Return ONLY valid JSON matching the specified schema
-6. Use English for all descriptions
-7. Be precise and factual - describe only what you can see`;
+Focus on capturing the "Subjective Experience" of the scene (Where am I? What does it feel like? What time is it?) rather than just listing data.
+
+# Instructions
+
+## 1. Establish the Observer (Scene.Viewpoint)
+- You must define the camera's position and angle using the 'viewpoint' array.
+- Use specific keywords to ground the observer: "eye-level", "aerial view", "top-down", "low angle", "drone shot", "POV".
+- Combine keywords to be precise (e.g., ["looking down", "high altitude"]).
+
+## 2. Encode Atmosphere & Time (Scene.TimeAndWeather)
+- Instead of describing shadows physically, infer the 'timeAndWeather' context.
+- Use evocative terms: "golden hour", "harsh noon sunlight", "overcast", "twilight".
+- Capture the mood in 'atmosphere' (e.g., "bustling", "serene", "melancholic").
+
+## 3. Objects & Regions
+- **Everything is an Object:** Treat massive regions (e.g., "Ocean", "Sky", "Beach", "Forest") as objects.
+- **Positioning:** Use 'position' arrays to describe 2D layout (e.g., ["left half", "upper region"]).
+- **Depth:** Use 'depth' to describe vertical layers or distance if relevant (e.g., ["sea level"], ["foreground"], ["horizon"]).
+
+## 4. Tactile Sensation (Objects.Texture)
+- Use the 'texture' field to convey physical materiality.
+- Describe how surfaces would feel to the touch: "grainy", "wet", "viscous", "rough", "fluffy", "metallic", "cold".
+
+## 5. Formatting
+- Output ONLY valid JSON matching the schema.
+- Use arrays for all descriptions to allow for multiple nuances (e.g., attributes: ["red", "rusty"]).
+- Be concise but descriptive.`;
 
 async function main() {
   const imagePath = process.argv[2];
