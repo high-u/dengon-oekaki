@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from 'node:path';
 import * as YAML from 'yaml';
 
 const BASE_URL = 'http://127.0.0.1:1234/v1';
-const MODEL = 'qwen/qwen3-vl-8b';
+const MODEL = 'qwen/qwen3-vl-4b';
 
 const schema = {
   type: 'object',
@@ -11,86 +11,72 @@ const schema = {
     scene: {
       type: 'object',
       properties: {
-        environment: {
+        location: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Environmental elements (e.g., room, green walls)',
+          description: 'Physical place name (e.g., bedroom, sandy beach, busy intersection)',
         },
-        atmosphere: {
+        ambiance: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Atmospheric qualities (e.g., quiet, tense)',
-        },
-        lightSource: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Light sources and direction (e.g., sunlight from top-left)',
-        },
-        timeAndWeather: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Time of day, lighting quality, and weather (e.g., early morning, golden hour, overcast, harsh sunlight, night)',
+          description: 'Holistic sensory context: lighting, weather, time, and mood (e.g., golden hour, gloomy, cozy, nostalgic)',
         },
         viewpoint: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Camera angle and observer position keywords (e.g., eye-level, looking down, looking up, aerial view, drone shot, POV, low angle)',
+          description: 'Observer position and angle (e.g., aerial view, eye-level, POV)',
         },
       },
-      required: ['environment', 'atmosphere', 'lightSource', 'viewpoint'],
+      required: ['location', 'ambiance', 'viewpoint'],
     },
     objects: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          position: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Position in frame (e.g., center, top-right)',
-          },
-          depth: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Depth or vertical layer (e.g., foreground, background, sea level, floating, on the floor)',
-          },
           name: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Object name(s)',
+            description: 'Object or region name',
           },
-          attributes: {
+          appearance: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Object attributes (e.g., red, paper, colorful)',
+            description: 'Visual traits: color, shape, size (e.g., red, round, tall)',
           },
           texture: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Material and tactile quality (e.g., wooden, metallic, fluffy, rough, wet, glassy, grainy)',
+            description: 'Tactile traits: material feeling (e.g., rough, fluffy, metallic, wet)',
           },
           state: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Object state (e.g., fixed, moving)',
+            description: 'Action or state of being (e.g., running, sleeping, flickering, broken, open)',
           },
-          relativePosition: {
+          relations: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Position relative to other objects',
+            description: 'Semantic connection to other objects (e.g., on the table, holding a cup, under the tree)',
           },
           text: {
-            type: 'string',
-            description: 'Text visible on object (if any)',
+            type: 'string', 
+            description: 'Visible text content on the object',
           },
+          position: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '2D Position or distribution in frame',
+          },
+          depth: {
+             type: 'array',
+             items: { type: 'string' },
+             description: 'Depth layer (e.g., foreground, background)',
+          }
         },
-        required: [
-          'position',
-          'name',
-        ],
+        required: ['name', 'appearance'], 
       },
-      description: 'List of detected objects',
+      description: 'Detected objects, regions, and background elements',
     },
   },
   required: ['scene', 'objects'],
@@ -98,33 +84,36 @@ const schema = {
 
 const systemPrompt = `You are a Visual Experience Encoder. Your goal is to translate visual input into a structured format that allows a text-only AI to "hallucinate" the scene as if it were seeing it through its own eyes.
 
-Focus on capturing the "Subjective Experience" of the scene (Where am I? What does it feel like? What time is it?) rather than just listing data.
+Focus on capturing the "Subjective Experience" (Where am I? What does it feel like? What is the atmosphere? How are things connected?) rather than just listing technical data.
 
 # Instructions
 
-## 1. Establish the Observer (Scene.Viewpoint)
-- You must define the camera's position and angle using the 'viewpoint' array.
-- Use specific keywords to ground the observer: "eye-level", "aerial view", "top-down", "low angle", "drone shot", "POV".
-- Combine keywords to be precise (e.g., ["looking down", "high altitude"]).
+## 1. Scene Context (The Stage)
+- **Location:** Identify the physical setting clearly (e.g., "cluttered bedroom", "bustling intersection", "serene forest").
+- **Ambiance:** Create a holistic sensory profile. Combine lighting, weather, time of day, and emotional mood into a single context.
+  - *Example:* ["golden hour", "warm orange glow", "long shadows", "nostalgic", "dusty air"]
+- **Viewpoint:** Define the observer's position and angle to ground the experience.
+  - *Keywords:* "aerial view", "eye-level", "looking down", "low angle", "drone shot", "POV", "macro".
 
-## 2. Encode Atmosphere & Time (Scene.TimeAndWeather)
-- Instead of describing shadows physically, infer the 'timeAndWeather' context.
-- Use evocative terms: "golden hour", "harsh noon sunlight", "overcast", "twilight".
-- Capture the mood in 'atmosphere' (e.g., "bustling", "serene", "melancholic").
+## 2. Objects & Sensations (The Actors & Props)
+- **Everything is an Object:** Treat prominent regions like "Sky", "Ocean", "Wall", or "Ground" as objects.
+- **Appearance:** Describe visual traits (Color, Shape, Size).
+- **Texture:** Describe tactile traits. How would it feel to touch? (e.g., "rough", "fluffy", "metallic", "wet", "cold", "grainy").
+- **State:** Describe the action or condition. Even static objects have states.
+  - *Examples:* "running", "sleeping", "broken", "open", "flickering", "parked".
+- **Relations:** Describe semantic connections to other objects.
+  - *Good:* ["sitting on the chair", "holding a cup", "next to the window"]
+  - *Bad:* ["center", "left"] (Use the 'position' field for coordinates).
+- **Text:** If there is ANY readable text, transcribe it exactly. This is crucial for context (e.g., signs, book titles, screen content).
 
-## 3. Objects & Regions
-- **Everything is an Object:** Treat massive regions (e.g., "Ocean", "Sky", "Beach", "Forest") as objects.
-- **Positioning:** Use 'position' arrays to describe 2D layout (e.g., ["left half", "upper region"]).
-- **Depth:** Use 'depth' to describe vertical layers or distance if relevant (e.g., ["sea level"], ["foreground"], ["horizon"]).
+## 3. Spatial Layout
+- **Position:** Use the 'position' array to describe 2D distribution in the frame (e.g., ["center", "top-right", "scattered"]).
+- **Depth:** Use the 'depth' array to describe vertical layers (e.g., ["foreground", "background", "horizon", "sea level"]).
 
-## 4. Tactile Sensation (Objects.Texture)
-- Use the 'texture' field to convey physical materiality.
-- Describe how surfaces would feel to the touch: "grainy", "wet", "viscous", "rough", "fluffy", "metallic", "cold".
-
-## 5. Formatting
-- Output ONLY valid JSON matching the schema.
-- Use arrays for all descriptions to allow for multiple nuances (e.g., attributes: ["red", "rusty"]).
-- Be concise but descriptive.`;
+## 4. Formatting rules
+- Return ONLY valid JSON matching the specified schema.
+- Use arrays for all string fields to allow for multiple, nuanced descriptors.
+- Be concise but evocative.`;
 
 async function main() {
   const imagePath = process.argv[2];
